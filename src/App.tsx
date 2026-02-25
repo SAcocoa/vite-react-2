@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 
 // === アイコンコンポーネント ===
 const RotateCcwIcon = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>;
@@ -8,6 +8,11 @@ const ChevronRightIcon = () => <svg width="18" height="18" viewBox="0 0 24 24" f
 const InfoIcon = () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>;
 const HomeIcon = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>;
 const ImageIcon = () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>;
+const CameraIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>;
+// 追加: セーブ・ロード・ゴミ箱アイコン
+const SaveIcon = () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>;
+const FolderIcon = () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>;
+const TrashIcon = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>;
 
 // === 型定義 ===
 type SkillRating = 'double' | 'single' | 'triangle' | null;
@@ -28,6 +33,58 @@ interface Spark {
   x: number;
   y: number;
 }
+
+// === ローカルデータベース（IndexedDB）の設定 ===
+// iPhoneのブラウザ内に大容量のデータ（写真など）を保存するための仕組みです
+const DB_NAME = 'LessonEvalAppDB';
+const STORE_NAME = 'records';
+
+const openDB = (): Promise<IDBDatabase> => {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, 1);
+    request.onupgradeneeded = (e: any) => {
+      if (!e.target.result.objectStoreNames.contains(STORE_NAME)) {
+        e.target.result.createObjectStore(STORE_NAME, { keyPath: 'id' });
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+};
+
+const saveRecordToDB = async (record: any) => {
+  const db = await openDB();
+  return new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    tx.objectStore(STORE_NAME).put(record);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+};
+
+const getRecordsFromDB = async () => {
+  const db = await openDB();
+  return new Promise<any[]>((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readonly');
+    const request = tx.objectStore(STORE_NAME).getAll();
+    request.onsuccess = () => {
+      const records = request.result.sort((a: any, b: any) => b.createdAt - a.createdAt);
+      resolve(records);
+    };
+    request.onerror = () => reject(request.error);
+  });
+};
+
+const deleteRecordFromDB = async (id: string) => {
+  const db = await openDB();
+  return new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    tx.objectStore(STORE_NAME).delete(id);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+};
+
 
 // === データ定義 ===
 const EVALUATION_ITEMS: ItemDef[] = [
@@ -56,7 +113,6 @@ const SKILL_ITEMS: ItemDef[] = [
   { id: 110, type: 'skill', category: '常時', text: 'パターン化・学習規律', titleLines: ['パターン化', '学習規律'], description: '学習規律や授業のパターン化を図っているか？', imageUrl: '/B10.png' },
 ];
 
-// === カテゴリカラーの定義 ===
 const CATEGORY_COLORS: Record<string, { bg: string, border: string, text: string, icon: string }> = {
   '導入': { bg: 'bg-pink-200', border: 'border-pink-400', text: 'text-pink-900', icon: 'bg-pink-600' },
   '展開': { bg: 'bg-orange-200', border: 'border-orange-400', text: 'text-orange-900', icon: 'bg-orange-600' },
@@ -66,33 +122,13 @@ const CATEGORY_COLORS: Record<string, { bg: string, border: string, text: string
   '常時': { bg: 'bg-purple-200', border: 'border-purple-400', text: 'text-purple-900', icon: 'bg-purple-600' },
 };
 
-// === SVGアニメーション & グローバルCSSリセット ===
 const CustomStyles = () => (
   <style>
     {`
-      /* Vite初期設定の不要な余白を強制リセット */
-      #root {
-        max-width: none !important;
-        width: 100% !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        text-align: left !important;
-      }
-      body {
-        margin: 0 !important;
-        padding: 0 !important;
-        display: block !important;
-      }
-
-      /* アニメーション定義 */
-      @keyframes ripple {
-        0% { transform: scale(0); opacity: 0.8; }
-        100% { transform: scale(3); opacity: 0; }
-      }
-      @keyframes floatUpFade {
-        0% { transform: translateY(0) scale(1); opacity: 1; }
-        100% { transform: translateY(-40px) scale(1.5); opacity: 0; }
-      }
+      #root { max-width: none !important; width: 100% !important; margin: 0 !important; padding: 0 !important; text-align: left !important; }
+      body { margin: 0 !important; padding: 0 !important; display: block !important; }
+      @keyframes ripple { 0% { transform: scale(0); opacity: 0.8; } 100% { transform: scale(3); opacity: 0; } }
+      @keyframes floatUpFade { 0% { transform: translateY(0) scale(1); opacity: 1; } 100% { transform: translateY(-40px) scale(1.5); opacity: 0; } }
       .animate-ripple { animation: ripple 0.6s ease-out forwards; }
       .animate-float-up { animation: floatUpFade 0.8s ease-out forwards; }
       .no-scrollbar::-webkit-scrollbar { display: none; }
@@ -106,98 +142,83 @@ interface EvalCardProps {
   item: ItemDef;
   count: number;
   isActive: boolean;
+  photoUrl?: string; 
   onToggle: (id: number) => void;
   onIncrement: (id: number) => void;
   onDecrement: (id: number) => void;
   onShowDetail: (item: ItemDef) => void;
+  onPhotoUpload: (id: number, file: File) => void; 
 }
 
-const EvalCard: React.FC<EvalCardProps> = ({ item, count, isActive, onToggle, onIncrement, onDecrement, onShowDetail }) => {
+const EvalCard: React.FC<EvalCardProps> = ({ item, count, isActive, photoUrl, onToggle, onIncrement, onDecrement, onShowDetail, onPhotoUpload }) => {
   const [sparks, setSparks] = useState<Spark[]>([]);
   const cardRef = useRef<HTMLDivElement>(null);
   const lastTapRef = useRef<number>(0);
+  const fileInputRef = useRef<HTMLInputElement>(null); 
 
   const handlePush = (e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
     if ((e.target as HTMLElement).closest('.ignore-push')) return;
-
     const now = Date.now();
     if (now - lastTapRef.current < 300) return;
     lastTapRef.current = now;
 
     if (!cardRef.current) return;
     const rect = cardRef.current.getBoundingClientRect();
-    
     let clientX = 0, clientY = 0;
-    if ('touches' in e) {
-      clientX = e.touches[0].clientX; clientY = e.touches[0].clientY;
-    } else {
-      clientX = e.clientX; clientY = e.clientY;
-    }
-    
-    const x = clientX - rect.left;
-    const y = clientY - rect.top;
-
+    if ('touches' in e) { clientX = e.touches[0].clientX; clientY = e.touches[0].clientY; } 
+    else { clientX = e.clientX; clientY = e.clientY; }
+    const x = clientX - rect.left; const y = clientY - rect.top;
     const newSpark: Spark = { id: Date.now(), x, y };
     setSparks((prev) => [...prev, newSpark]);
-
     onIncrement(item.id);
+    setTimeout(() => { setSparks((prev) => prev.filter((spark) => spark.id !== newSpark.id)); }, 800);
+  };
 
-    setTimeout(() => {
-      setSparks((prev) => prev.filter((spark) => spark.id !== newSpark.id));
-    }, 800);
+  const handleCameraClick = (e: React.MouseEvent | React.TouchEvent) => {
+    e.stopPropagation();
+    if (fileInputRef.current) { fileInputRef.current.click(); }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      onPhotoUpload(item.id, e.target.files[0]);
+    }
   };
 
   return (
     <div
       ref={cardRef}
-      className={`relative overflow-hidden rounded-2xl shadow-sm border transition-all flex flex-col h-28 ${
-        isActive ? 'bg-white border-blue-200' : 'bg-gray-50 border-gray-200 opacity-60'
-      }`}
+      className={`relative overflow-hidden rounded-2xl shadow-sm border transition-all flex flex-col h-28 ${isActive ? 'bg-white border-blue-200' : 'bg-gray-50 border-gray-200 opacity-60'}`}
     >
+      <input type="file" accept="image/*" ref={fileInputRef} className="hidden" onChange={handleFileChange} />
+
       <div className="flex items-stretch border-b border-gray-100 bg-gray-50 z-20 ignore-push min-h-[2.5rem]">
-        <div 
-          className="flex-1 p-1.5 cursor-pointer flex items-center" 
-          onClick={() => onToggle(item.id)}
-        >
+        <div className="flex-1 p-1.5 cursor-pointer flex items-center" onClick={() => onToggle(item.id)}>
           <div className={`w-2.5 h-2.5 rounded-full mr-1.5 shrink-0 transition-colors ${isActive ? 'bg-blue-500' : 'bg-gray-300'}`}></div>
           <div className="flex-1 flex flex-col justify-center items-center text-center">
             {item.titleLines.map((line, idx) => (
-              <h3 key={idx} className={`text-sm sm:text-base font-bold leading-none ${isActive ? 'text-gray-800' : 'text-gray-400'}`}>
-                {line}
-              </h3>
+              <h3 key={idx} className={`text-sm sm:text-base font-bold leading-none ${isActive ? 'text-gray-800' : 'text-gray-400'}`}>{line}</h3>
             ))}
           </div>
         </div>
-        <button 
-          className="px-2.5 text-blue-500 hover:bg-blue-100 border-l border-gray-100 transition-colors flex items-center justify-center"
-          onClick={() => onShowDetail(item)}
-        >
+        <button className="px-2.5 text-blue-500 hover:bg-blue-100 border-l border-gray-100 transition-colors flex items-center justify-center relative" onClick={() => onShowDetail(item)}>
           <InfoIcon />
+          {photoUrl && <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border border-white"></span>}
         </button>
       </div>
 
-      <div 
-        className={`flex-1 flex justify-center items-center select-none touch-manipulation ${isActive ? 'cursor-pointer active:bg-blue-50' : ''}`}
-        onClick={(e) => isActive && handlePush(e)}
-        onTouchStart={(e) => isActive && handlePush(e)}
-      >
-        <div className={`text-4xl sm:text-5xl font-extrabold ${isActive ? 'text-blue-600' : 'text-gray-400'}`}>
-          {count}
-        </div>
+      <div className={`flex-1 flex justify-center items-center select-none touch-manipulation ${isActive ? 'cursor-pointer active:bg-blue-50' : ''}`} onClick={(e) => isActive && handlePush(e)} onTouchStart={(e) => isActive && handlePush(e)}>
+        <div className={`text-4xl sm:text-5xl font-extrabold ${isActive ? 'text-blue-600' : 'text-gray-400'}`}>{count}</div>
       </div>
 
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          if (count > 0) onDecrement(item.id);
-        }}
-        onTouchStart={(e) => e.stopPropagation()}
-        disabled={count === 0 || !isActive}
-        className={`absolute bottom-1.5 right-1.5 p-1.5 rounded-full z-20 transition-colors flex items-center justify-center ignore-push ${
-          count > 0 && isActive 
-            ? 'bg-gray-300 text-gray-800 hover:bg-gray-400 shadow-sm' 
-            : 'bg-gray-100 text-gray-400 opacity-60 cursor-not-allowed'
-        } ${!isActive ? 'hidden' : ''}`}
+      <button onClick={handleCameraClick} onTouchStart={(e) => e.stopPropagation()} disabled={!isActive}
+        className={`absolute bottom-1.5 left-1.5 p-1.5 rounded-full z-20 transition-colors flex items-center justify-center ignore-push ${photoUrl ? 'bg-blue-100 text-blue-600 shadow-sm border border-blue-200' : 'bg-gray-100 text-gray-500 hover:bg-gray-200 shadow-sm'} ${!isActive ? 'hidden' : ''}`}
+      >
+        <CameraIcon />
+      </button>
+
+      <button onClick={(e) => { e.stopPropagation(); if (count > 0) onDecrement(item.id); }} onTouchStart={(e) => e.stopPropagation()} disabled={count === 0 || !isActive}
+        className={`absolute bottom-1.5 right-1.5 p-1.5 rounded-full z-20 transition-colors flex items-center justify-center ignore-push ${count > 0 && isActive ? 'bg-gray-300 text-gray-800 hover:bg-gray-400 shadow-sm' : 'bg-gray-100 text-gray-400 opacity-60 cursor-not-allowed'} ${!isActive ? 'hidden' : ''}`}
       >
         <MinusIcon />
       </button>
@@ -224,58 +245,30 @@ interface SkillCardProps {
 
 const SkillCard: React.FC<SkillCardProps> = ({ item, rating, isActive, onToggle, onRate, onShowDetail }) => {
   return (
-    <div className={`relative overflow-hidden rounded-2xl shadow-sm border transition-all flex flex-col h-28 ${
-      isActive ? 'bg-white border-green-200' : 'bg-gray-50 border-gray-200 opacity-60'
-    }`}>
+    <div className={`relative overflow-hidden rounded-2xl shadow-sm border transition-all flex flex-col h-28 ${isActive ? 'bg-white border-green-200' : 'bg-gray-50 border-gray-200 opacity-60'}`}>
       <div className="flex items-stretch border-b border-gray-100 bg-gray-50 z-20 min-h-[2.5rem]">
-        <div 
-          className="flex-1 p-1.5 cursor-pointer flex items-center" 
-          onClick={() => onToggle(item.id)}
-        >
+        <div className="flex-1 p-1.5 cursor-pointer flex items-center" onClick={() => onToggle(item.id)}>
           <div className={`w-2.5 h-2.5 rounded-full mr-1.5 shrink-0 transition-colors ${isActive ? 'bg-green-500' : 'bg-gray-300'}`}></div>
           <div className="flex-1 flex flex-col justify-center items-center text-center">
             {item.titleLines.map((line, idx) => (
-              <h3 key={idx} className={`text-sm sm:text-base font-bold leading-none ${isActive ? 'text-gray-800' : 'text-gray-400'}`}>
-                {line}
-              </h3>
+              <h3 key={idx} className={`text-sm sm:text-base font-bold leading-none ${isActive ? 'text-gray-800' : 'text-gray-400'}`}>{line}</h3>
             ))}
           </div>
         </div>
-        <button 
-          className="px-2.5 text-blue-500 hover:bg-blue-100 border-l border-gray-100 transition-colors flex items-center justify-center"
-          onClick={() => onShowDetail(item)}
-        >
+        <button className="px-2.5 text-blue-500 hover:bg-blue-100 border-l border-gray-100 transition-colors flex items-center justify-center" onClick={() => onShowDetail(item)}>
           <InfoIcon />
         </button>
       </div>
 
       <div className="flex-1 flex justify-evenly items-center px-1">
-        <button 
-          onClick={(e) => { e.stopPropagation(); isActive && onRate(item.id, 'double'); }}
-          disabled={!isActive}
-          className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full text-2xl flex items-center justify-center transition-all ${
-            rating === 'double' && isActive 
-              ? 'bg-green-100 text-green-600 border-2 border-green-500 shadow-md transform scale-110 font-bold' 
-              : 'bg-gray-50 text-gray-400 border border-gray-200 hover:bg-gray-100'
-          }`}
+        <button onClick={(e) => { e.stopPropagation(); isActive && onRate(item.id, 'double'); }} disabled={!isActive}
+          className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full text-2xl flex items-center justify-center transition-all ${rating === 'double' && isActive ? 'bg-green-100 text-green-600 border-2 border-green-500 shadow-md transform scale-110 font-bold' : 'bg-gray-50 text-gray-400 border border-gray-200 hover:bg-gray-100'}`}
         >◎</button>
-        <button 
-          onClick={(e) => { e.stopPropagation(); isActive && onRate(item.id, 'single'); }}
-          disabled={!isActive}
-          className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full text-xl flex items-center justify-center transition-all ${
-            rating === 'single' && isActive 
-              ? 'bg-blue-100 text-blue-600 border-2 border-blue-500 shadow-md transform scale-110 font-bold' 
-              : 'bg-gray-50 text-gray-400 border border-gray-200 hover:bg-gray-100'
-          }`}
+        <button onClick={(e) => { e.stopPropagation(); isActive && onRate(item.id, 'single'); }} disabled={!isActive}
+          className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full text-xl flex items-center justify-center transition-all ${rating === 'single' && isActive ? 'bg-blue-100 text-blue-600 border-2 border-blue-500 shadow-md transform scale-110 font-bold' : 'bg-gray-50 text-gray-400 border border-gray-200 hover:bg-gray-100'}`}
         >◯</button>
-        <button 
-          onClick={(e) => { e.stopPropagation(); isActive && onRate(item.id, 'triangle'); }}
-          disabled={!isActive}
-          className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full text-xl flex items-center justify-center transition-all ${
-            rating === 'triangle' && isActive 
-              ? 'bg-orange-100 text-orange-600 border-2 border-orange-500 shadow-md transform scale-110 font-bold' 
-              : 'bg-gray-50 text-gray-400 border border-gray-200 hover:bg-gray-100'
-          }`}
+        <button onClick={(e) => { e.stopPropagation(); isActive && onRate(item.id, 'triangle'); }} disabled={!isActive}
+          className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full text-xl flex items-center justify-center transition-all ${rating === 'triangle' && isActive ? 'bg-orange-100 text-orange-600 border-2 border-orange-500 shadow-md transform scale-110 font-bold' : 'bg-gray-50 text-gray-400 border border-gray-200 hover:bg-gray-100'}`}
         >△</button>
       </div>
     </div>
@@ -287,53 +280,142 @@ export default function App() {
   const [currentPage, setCurrentPage] = useState<PageState>('home');
   const [detailItem, setDetailItem] = useState<ItemDef | null>(null);
 
+  // 通知とダイアログの状態
+  const [toast, setToast] = useState<string | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<{ isOpen: boolean, message: string, onConfirm: () => void } | null>(null);
+
+  // セーブ・ロード関係のモーダル状態
+  const [showSaveModal, setShowSaveModal] = useState(false);
+  const [showLoadModal, setShowLoadModal] = useState(false);
+  const [saveName, setSaveName] = useState('');
+  const [savedRecords, setSavedRecords] = useState<any[]>([]);
+
+  // アプリのデータ状態
+  const [itemPhotos, setItemPhotos] = useState<{ [key: number]: Blob }>({});
+  const [itemPhotoUrls, setItemPhotoUrls] = useState<{ [key: number]: string }>({});
+
   const [evalCounts, setEvalCounts] = useState<{ [key: number]: number }>({});
   const [evalActive, setEvalActive] = useState<{ [key: number]: boolean }>(() => {
-    const init: any = {};
-    EVALUATION_ITEMS.forEach(item => init[item.id] = true);
-    return init;
+    const init: any = {}; EVALUATION_ITEMS.forEach(item => init[item.id] = true); return init;
   });
 
   const [skillRatings, setSkillRatings] = useState<{ [key: number]: SkillRating }>({});
   const [skillActive, setSkillActive] = useState<{ [key: number]: boolean }>(() => {
-    const init: any = {};
-    SKILL_ITEMS.forEach(item => init[item.id] = true);
-    return init;
+    const init: any = {}; SKILL_ITEMS.forEach(item => init[item.id] = true); return init;
   });
 
+  // Blob(写真)から表示用のURLを生成する処理
+  useEffect(() => {
+    const urls: { [key: number]: string } = {};
+    for (const id in itemPhotos) {
+      if (itemPhotos[id]) {
+        urls[id] = URL.createObjectURL(itemPhotos[id]);
+      }
+    }
+    setItemPhotoUrls(urls);
+    return () => {
+      for (const id in urls) { URL.revokeObjectURL(urls[id]); }
+    };
+  }, [itemPhotos]);
+
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  // アクション処理
   const handleEvalToggle = (id: number) => setEvalActive(p => ({ ...p, [id]: !p[id] }));
-  const handleEvalIncrement = useCallback((id: number) => {
-    setEvalCounts(prev => ({ ...prev, [id]: (prev[id] || 0) + 1 }));
-  }, []);
-  const handleEvalDecrement = useCallback((id: number) => {
-    setEvalCounts(prev => ({ ...prev, [id]: Math.max(0, (prev[id] || 0) - 1) }));
-  }, []);
+  const handleEvalIncrement = useCallback((id: number) => setEvalCounts(prev => ({ ...prev, [id]: (prev[id] || 0) + 1 })), []);
+  const handleEvalDecrement = useCallback((id: number) => setEvalCounts(prev => ({ ...prev, [id]: Math.max(0, (prev[id] || 0) - 1) })), []);
 
   const handleSkillToggle = (id: number) => setSkillActive(p => ({ ...p, [id]: !p[id] }));
-  const handleSkillRate = (id: number, rating: SkillRating) => {
-    setSkillRatings(prev => ({ ...prev, [id]: prev[id] === rating ? null : rating }));
-  };
+  const handleSkillRate = (id: number, rating: SkillRating) => setSkillRatings(prev => ({ ...prev, [id]: prev[id] === rating ? null : rating }));
 
   const showDetail = (item: ItemDef) => {
     setDetailItem(item);
     setCurrentPage('detail');
   };
 
+  const handlePhotoUpload = useCallback((id: number, file: File) => {
+    setItemPhotos(prev => ({ ...prev, [id]: file }));
+  }, []);
+
+  // === 保存・呼び出し・リセット処理 ===
   const handleResetAll = () => {
-    if (window.confirm('すべての記録と設定を初期化しますか？')) {
-      setEvalCounts({});
-      setSkillRatings({});
-      const resetEvalActive: any = {}; EVALUATION_ITEMS.forEach(i => resetEvalActive[i.id] = true);
-      const resetSkillActive: any = {}; SKILL_ITEMS.forEach(i => resetSkillActive[i.id] = true);
-      setEvalActive(resetEvalActive);
-      setSkillActive(resetSkillActive);
+    setConfirmDialog({
+      isOpen: true,
+      message: '入力中のすべての記録と写真、設定を初期化しますか？（保存済みの記録は消えません）',
+      onConfirm: () => {
+        setEvalCounts({}); setSkillRatings({}); setItemPhotos({});
+        setConfirmDialog(null);
+        showToast('データを初期化しました');
+      }
+    });
+  };
+
+  const handleLoadClick = async () => {
+    try {
+      const records = await getRecordsFromDB();
+      setSavedRecords(records);
+      setShowLoadModal(true);
+    } catch (e) {
+      showToast('過去の記録の取得に失敗しました');
     }
   };
 
-  const totalEvalCount = EVALUATION_ITEMS.reduce((sum, item) => {
-    return evalActive[item.id] ? sum + (evalCounts[item.id] || 0) : sum;
-  }, 0);
+  const executeSave = async () => {
+    if (!saveName.trim()) {
+      showToast('名前を入力してください');
+      return;
+    }
+    const record = {
+      id: Date.now().toString(),
+      name: saveName.trim(),
+      createdAt: Date.now(),
+      evalCounts, skillRatings, itemPhotos, evalActive, skillActive
+    };
+    try {
+      await saveRecordToDB(record);
+      setShowSaveModal(false);
+      showToast('記録を保存しました！');
+    } catch (e) {
+      showToast('保存に失敗しました');
+    }
+  };
 
+  const executeLoad = (record: any) => {
+    setConfirmDialog({
+      isOpen: true,
+      message: `「${record.name}」を呼び出しますか？（現在入力中のデータは上書きされます）`,
+      onConfirm: () => {
+        setEvalCounts(record.evalCounts || {});
+        setSkillRatings(record.skillRatings || {});
+        setItemPhotos(record.itemPhotos || {});
+        setEvalActive(record.evalActive || {});
+        setSkillActive(record.skillActive || {});
+        setShowLoadModal(false);
+        setConfirmDialog(null);
+        showToast('記録を呼び出しました');
+      }
+    });
+  };
+
+  const executeDelete = (id: string, name: string) => {
+    setConfirmDialog({
+      isOpen: true,
+      message: `保存した記録「${name}」を削除してもよろしいですか？`,
+      onConfirm: async () => {
+        await deleteRecordFromDB(id);
+        const records = await getRecordsFromDB();
+        setSavedRecords(records);
+        setConfirmDialog(null);
+        showToast('記録を削除しました');
+      }
+    });
+  };
+
+  // 集計
+  const totalEvalCount = EVALUATION_ITEMS.reduce((sum, item) => evalActive[item.id] ? sum + (evalCounts[item.id] || 0) : sum, 0);
   let doubleCount = 0, singleCount = 0, triangleCount = 0;
   SKILL_ITEMS.forEach(item => {
     if (skillActive[item.id]) {
@@ -347,35 +429,149 @@ export default function App() {
     <div className="min-h-screen bg-gray-100 flex justify-center font-sans">
       <CustomStyles />
       
-      {/* PC表示時はスマホサイズ(max-w-md)に制限、スマホでは横幅いっぱい(w-full)になるように設定 */}
       <div className="w-full sm:max-w-md mx-auto bg-white min-h-[100dvh] flex flex-col relative shadow-2xl overflow-hidden">
         
+        {/* === トースト通知 === */}
+        {toast && (
+          <div className="absolute top-12 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white px-6 py-3 rounded-full shadow-2xl z-[70] transition-opacity animate-in fade-in slide-in-from-top-4 whitespace-nowrap font-bold text-sm">
+            {toast}
+          </div>
+        )}
+
+        {/* === 確認ダイアログ === */}
+        {confirmDialog?.isOpen && (
+          <div className="absolute inset-0 bg-black bg-opacity-50 z-[60] flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-xl animate-in zoom-in-95 duration-200">
+              <h3 className="text-base font-bold text-gray-800 mb-6 leading-relaxed text-center">{confirmDialog.message}</h3>
+              <div className="flex space-x-3">
+                <button onClick={() => setConfirmDialog(null)} className="flex-1 py-3.5 bg-gray-100 text-gray-700 font-bold rounded-xl hover:bg-gray-200">キャンセル</button>
+                <button onClick={confirmDialog.onConfirm} className="flex-1 py-3.5 bg-blue-600 text-white font-bold rounded-xl shadow-md hover:bg-blue-700">OK</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* === 保存モーダル === */}
+        {showSaveModal && (
+          <div className="absolute inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-xl animate-in slide-in-from-bottom-4 duration-200">
+              <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center">
+                <SaveIcon /> <span className="ml-2">記録を保存</span>
+              </h3>
+              <p className="text-xs text-gray-500 mb-2">点数、評価、撮影した写真のすべてが保存されます。</p>
+              <input 
+                type="text" 
+                value={saveName}
+                onChange={(e) => setSaveName(e.target.value)}
+                placeholder="保存する名前を入力"
+                className="w-full border-2 border-gray-200 rounded-xl px-4 py-3.5 mb-6 focus:outline-none focus:border-blue-500 font-bold text-gray-700 bg-gray-50"
+              />
+              <div className="flex space-x-3">
+                <button onClick={() => setShowSaveModal(false)} className="flex-1 py-3.5 bg-gray-100 text-gray-700 font-bold rounded-xl hover:bg-gray-200">キャンセル</button>
+                <button onClick={executeSave} className="flex-1 py-3.5 bg-blue-600 text-white font-bold rounded-xl shadow-md hover:bg-blue-700">保存する</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* === 呼び出しモーダル === */}
+        {showLoadModal && (
+          <div className="absolute inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl p-5 w-full max-w-sm shadow-xl flex flex-col max-h-[85vh] animate-in slide-in-from-bottom-4 duration-200">
+              <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center shrink-0">
+                <FolderIcon /> <span className="ml-2">過去の記録を呼び出す</span>
+              </h3>
+              
+              <div className="flex-1 overflow-y-auto space-y-3 pr-1 no-scrollbar mb-6">
+                {savedRecords.length === 0 ? (
+                  <p className="text-gray-500 text-center py-8 font-medium">保存された記録はありません。</p>
+                ) : (
+                  savedRecords.map(record => (
+                    <div key={record.id} className="border-2 border-gray-100 rounded-xl p-3 flex justify-between items-center bg-gray-50 hover:border-blue-300 transition-colors">
+                      <div className="flex-1 cursor-pointer pr-2" onClick={() => executeLoad(record)}>
+                        <h4 className="font-bold text-gray-800 text-base">{record.name}</h4>
+                        <p className="text-xs text-gray-500 mt-1 font-medium">{new Date(record.createdAt).toLocaleString()}</p>
+                      </div>
+                      <button 
+                        onClick={() => executeDelete(record.id, record.name)}
+                        className="p-2.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors shrink-0 border border-gray-200 bg-white"
+                      >
+                        <TrashIcon />
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <button onClick={() => setShowLoadModal(false)} className="w-full py-3.5 bg-gray-100 text-gray-700 font-bold rounded-xl hover:bg-gray-200 shrink-0">
+                閉じる
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* === ホーム画面 === */}
         {currentPage === 'home' && (
           <div className="flex-1 flex flex-col bg-gradient-to-br from-blue-50 to-white overflow-y-auto no-scrollbar">
-            <main className="flex-1 flex flex-col items-center justify-center p-4 sm:p-6 space-y-10">
+            <main className="flex-1 flex flex-col items-center justify-center p-4 sm:p-6 space-y-8">
               
-              <div className="text-center space-y-2">
+              <div className="text-center space-y-2 pt-4">
                 <h1 className="text-3xl sm:text-4xl font-extrabold text-gray-800 tracking-tight leading-tight">授業評価<br/>プログラム</h1>
                 <p className="text-lg sm:text-xl font-bold text-gray-500 tracking-[0.3em]">-S.Aoki-</p>
               </div>
 
-              {/* 幅を広げて余白を減らしました */}
               <div className="w-full space-y-4 px-2">
-                <button 
-                  onClick={() => setCurrentPage('evaluation')}
-                  className="w-full py-4 bg-blue-600 text-white rounded-2xl font-bold text-lg sm:text-xl shadow-lg shadow-blue-200 hover:bg-blue-700 active:scale-95 transition-all flex items-center justify-between px-6"
-                >
+                <button onClick={() => setCurrentPage('evaluation')} className="w-full py-4 bg-blue-600 text-white rounded-2xl font-bold text-lg sm:text-xl shadow-lg shadow-blue-200 hover:bg-blue-700 active:scale-95 transition-all flex items-center justify-between px-6">
                   <span className="flex items-center"><span className="w-2 h-8 bg-blue-400 rounded-full mr-3"></span>授業の設定と工夫</span>
                   <ChevronRightIcon />
                 </button>
-                <button 
-                  onClick={() => setCurrentPage('skill')}
-                  className="w-full py-4 bg-green-600 text-white rounded-2xl font-bold text-lg sm:text-xl shadow-lg shadow-green-200 hover:bg-green-700 active:scale-95 transition-all flex items-center justify-between px-6"
-                >
+                <button onClick={() => setCurrentPage('skill')} className="w-full py-4 bg-green-600 text-white rounded-2xl font-bold text-lg sm:text-xl shadow-lg shadow-green-200 hover:bg-green-700 active:scale-95 transition-all flex items-center justify-between px-6">
                   <span className="flex items-center"><span className="w-2 h-8 bg-green-400 rounded-full mr-3"></span>教師の技能の発揮</span>
                   <ChevronRightIcon />
                 </button>
+              </div>
+
+              {/* セーブ・ロードボタンのエリア */}
+              <div className="w-full px-2">
+                <div className="flex justify-center space-x-3">
+                  <button 
+                    onClick={async () => {
+                      try {
+                        // 過去の記録を取得して名前のかぶりをチェックする
+                        const records = await getRecordsFromDB();
+                        const existingNames = new Set(records.map(r => r.name));
+                        
+                        const d = new Date();
+                        const baseName = `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日の記録`;
+                        let newName = baseName;
+                        let counter = 2;
+                        
+                        // 同じ名前が存在する間は (2), (3)... と番号を増やす
+                        while (existingNames.has(newName)) {
+                          newName = `${baseName}(${counter})`;
+                          counter++;
+                        }
+                        
+                        setSaveName(newName);
+                        setShowSaveModal(true);
+                      } catch (e) {
+                        showToast('保存の準備に失敗しました');
+                      }
+                    }}
+                    className="flex-1 py-4 bg-indigo-50 text-indigo-700 rounded-2xl font-bold text-base shadow-sm border-2 border-indigo-100 hover:bg-indigo-100 active:scale-95 transition-all flex flex-col items-center justify-center"
+                  >
+                    <SaveIcon />
+                    <span className="mt-1">記録を保存</span>
+                  </button>
+                  
+                  <button 
+                    onClick={handleLoadClick}
+                    className="flex-1 py-4 bg-teal-50 text-teal-700 rounded-2xl font-bold text-base shadow-sm border-2 border-teal-100 hover:bg-teal-100 active:scale-95 transition-all flex flex-col items-center justify-center"
+                  >
+                    <FolderIcon />
+                    <span className="mt-1">記録を呼出</span>
+                  </button>
+                </div>
               </div>
 
               <div className="w-full bg-white rounded-2xl shadow-sm border border-gray-200 p-5 space-y-4 mx-2">
@@ -405,10 +601,7 @@ export default function App() {
                 </div>
               </div>
 
-              <button 
-                onClick={handleResetAll}
-                className="flex items-center text-sm text-red-500 font-medium px-5 py-2.5 rounded-lg border border-red-200 hover:bg-red-50 transition-colors"
-              >
+              <button onClick={handleResetAll} className="flex items-center text-sm text-red-500 font-medium px-5 py-2.5 rounded-lg border border-red-200 hover:bg-red-50 transition-colors pb-6">
                 <span className="mr-2 flex items-center"><RotateCcwIcon /></span>データ初期化
               </button>
             </main>
@@ -427,7 +620,6 @@ export default function App() {
                 教師スキル <ChevronRightIcon />
               </button>
             </header>
-            {/* 余白を削り画面いっぱいに表示 (p-2 sm:p-3) */}
             <main className="flex-1 overflow-y-auto p-2 sm:p-3 no-scrollbar space-y-4 pb-12">
               {['導入', '展開', 'まとめ'].map((category) => {
                 const colors = CATEGORY_COLORS[category];
@@ -444,10 +636,12 @@ export default function App() {
                         item={item}
                         count={evalCounts[item.id] || 0}
                         isActive={evalActive[item.id]}
+                        photoUrl={itemPhotoUrls[item.id]} // 写真のURLを渡す
                         onToggle={handleEvalToggle}
                         onIncrement={handleEvalIncrement}
                         onDecrement={handleEvalDecrement}
                         onShowDetail={showDetail}
+                        onPhotoUpload={handlePhotoUpload}
                       />
                     ))}
                   </div>
@@ -528,24 +722,45 @@ export default function App() {
                 </p>
               </div>
               
-              {/* === 画像表示エリア === */}
-              <div className="w-full bg-white rounded-2xl flex items-center justify-center p-2 min-h-[250px] overflow-hidden relative">
-                {detailItem.imageUrl ? (
-                  <img 
-                    src={encodeURI(detailItem.imageUrl)} 
-                    alt={detailItem.text} 
-                    className="max-w-full max-h-[400px] object-contain rounded-xl shadow-sm border border-gray-100"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).style.display = 'none';
-                      (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
-                    }}
-                  />
-                ) : null}
+              {/* === 画像・写真表示エリア === */}
+              <div className="w-full bg-white rounded-2xl flex flex-col items-center p-4 space-y-6 shadow-sm border border-gray-100">
                 
-                <div className={`text-gray-400 font-medium text-center px-4 leading-loose flex flex-col items-center justify-center ${detailItem.imageUrl ? 'hidden' : ''}`}>
-                  <ImageIcon />
-                  <span className="mt-2 text-base">画像ファイル（{detailItem.imageUrl}）が<br/>見つかりません</span>
+                {itemPhotoUrls[detailItem.id] && (
+                  <div className="w-full flex flex-col items-center">
+                    <span className="text-sm font-bold text-blue-500 mb-3 flex items-center bg-blue-50 px-3 py-1 rounded-full border border-blue-100">
+                      <CameraIcon /> <span className="ml-1">撮影した写真</span>
+                    </span>
+                    <img 
+                      src={itemPhotoUrls[detailItem.id]} 
+                      alt="撮影した写真" 
+                      className="max-w-full max-h-[500px] object-contain rounded-xl shadow-md border border-gray-200"
+                    />
+                  </div>
+                )}
+
+                <div className={`w-full flex flex-col items-center ${itemPhotoUrls[detailItem.id] ? 'pt-6 border-t border-dashed border-gray-200' : ''}`}>
+                  <span className="text-sm font-bold text-gray-400 mb-3 flex items-center">
+                    <ImageIcon /> <span className="ml-1">参考画像</span>
+                  </span>
+                  
+                  {detailItem.imageUrl ? (
+                    <img 
+                      src={encodeURI(detailItem.imageUrl)} 
+                      alt={detailItem.text} 
+                      className={`max-w-full object-contain rounded-xl border border-gray-100 ${itemPhotoUrls[detailItem.id] ? 'max-h-[200px] opacity-70' : 'max-h-[400px] shadow-sm'}`}
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).style.display = 'none';
+                        (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
+                      }}
+                    />
+                  ) : null}
+                  
+                  <div className={`text-gray-400 font-medium text-center px-4 leading-loose flex flex-col items-center justify-center ${detailItem.imageUrl ? 'hidden' : ''}`}>
+                    <ImageIcon />
+                    <span className="mt-2 text-base">画像ファイル（{detailItem.imageUrl}）が<br/>見つかりません</span>
+                  </div>
                 </div>
+
               </div>
             </main>
           </div>
