@@ -9,7 +9,6 @@ const InfoIcon = () => <svg width="24" height="24" viewBox="0 0 24 24" fill="non
 const HomeIcon = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>;
 const ImageIcon = () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>;
 const CameraIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>;
-// 追加: セーブ・ロード・ゴミ箱アイコン
 const SaveIcon = () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>;
 const FolderIcon = () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>;
 const TrashIcon = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>;
@@ -35,7 +34,6 @@ interface Spark {
 }
 
 // === ローカルデータベース（IndexedDB）の設定 ===
-// iPhoneのブラウザ内に大容量のデータ（写真など）を保存するための仕組みです
 const DB_NAME = 'LessonEvalAppDB';
 const STORE_NAME = 'records';
 
@@ -142,7 +140,7 @@ interface EvalCardProps {
   item: ItemDef;
   count: number;
   isActive: boolean;
-  photoUrl?: string; 
+  hasPhotos?: boolean; // 写真が1枚以上あるかどうかの判定用
   onToggle: (id: number) => void;
   onIncrement: (id: number) => void;
   onDecrement: (id: number) => void;
@@ -150,7 +148,7 @@ interface EvalCardProps {
   onPhotoUpload: (id: number, file: File) => void; 
 }
 
-const EvalCard: React.FC<EvalCardProps> = ({ item, count, isActive, photoUrl, onToggle, onIncrement, onDecrement, onShowDetail, onPhotoUpload }) => {
+const EvalCard: React.FC<EvalCardProps> = ({ item, count, isActive, hasPhotos, onToggle, onIncrement, onDecrement, onShowDetail, onPhotoUpload }) => {
   const [sparks, setSparks] = useState<Spark[]>([]);
   const cardRef = useRef<HTMLDivElement>(null);
   const lastTapRef = useRef<number>(0);
@@ -183,6 +181,8 @@ const EvalCard: React.FC<EvalCardProps> = ({ item, count, isActive, photoUrl, on
     if (e.target.files && e.target.files[0]) {
       onPhotoUpload(item.id, e.target.files[0]);
     }
+    // 連続して同じファイルを選べるようにリセット
+    e.target.value = '';
   };
 
   return (
@@ -203,7 +203,7 @@ const EvalCard: React.FC<EvalCardProps> = ({ item, count, isActive, photoUrl, on
         </div>
         <button className="px-2.5 text-blue-500 hover:bg-blue-100 border-l border-gray-100 transition-colors flex items-center justify-center relative" onClick={() => onShowDetail(item)}>
           <InfoIcon />
-          {photoUrl && <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border border-white"></span>}
+          {hasPhotos && <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border border-white"></span>}
         </button>
       </div>
 
@@ -212,7 +212,7 @@ const EvalCard: React.FC<EvalCardProps> = ({ item, count, isActive, photoUrl, on
       </div>
 
       <button onClick={handleCameraClick} onTouchStart={(e) => e.stopPropagation()} disabled={!isActive}
-        className={`absolute bottom-1.5 left-1.5 p-1.5 rounded-full z-20 transition-colors flex items-center justify-center ignore-push ${photoUrl ? 'bg-blue-100 text-blue-600 shadow-sm border border-blue-200' : 'bg-gray-100 text-gray-500 hover:bg-gray-200 shadow-sm'} ${!isActive ? 'hidden' : ''}`}
+        className={`absolute bottom-1.5 left-1.5 p-1.5 rounded-full z-20 transition-colors flex items-center justify-center ignore-push ${hasPhotos ? 'bg-blue-100 text-blue-600 shadow-sm border border-blue-200' : 'bg-gray-100 text-gray-500 hover:bg-gray-200 shadow-sm'} ${!isActive ? 'hidden' : ''}`}
       >
         <CameraIcon />
       </button>
@@ -289,10 +289,12 @@ export default function App() {
   const [showLoadModal, setShowLoadModal] = useState(false);
   const [saveName, setSaveName] = useState('');
   const [savedRecords, setSavedRecords] = useState<any[]>([]);
+  // 上書き保存用に、現在読み込んでいる記録のIDを保持する
+  const [currentRecordId, setCurrentRecordId] = useState<string | null>(null);
 
-  // アプリのデータ状態
-  const [itemPhotos, setItemPhotos] = useState<{ [key: number]: Blob }>({});
-  const [itemPhotoUrls, setItemPhotoUrls] = useState<{ [key: number]: string }>({});
+  // アプリのデータ状態 (写真を配列で保持するように変更)
+  const [itemPhotos, setItemPhotos] = useState<{ [key: number]: Blob[] }>({});
+  const [itemPhotoUrls, setItemPhotoUrls] = useState<{ [key: number]: string[] }>({});
 
   const [evalCounts, setEvalCounts] = useState<{ [key: number]: number }>({});
   const [evalActive, setEvalActive] = useState<{ [key: number]: boolean }>(() => {
@@ -304,17 +306,20 @@ export default function App() {
     const init: any = {}; SKILL_ITEMS.forEach(item => init[item.id] = true); return init;
   });
 
-  // Blob(写真)から表示用のURLを生成する処理
+  // Blob(写真配列)から表示用のURL配列を生成する処理
   useEffect(() => {
-    const urls: { [key: number]: string } = {};
+    const urls: { [key: number]: string[] } = {};
     for (const id in itemPhotos) {
-      if (itemPhotos[id]) {
-        urls[id] = URL.createObjectURL(itemPhotos[id]);
+      if (itemPhotos[id] && itemPhotos[id].length > 0) {
+        urls[id] = itemPhotos[id].map(blob => URL.createObjectURL(blob));
       }
     }
     setItemPhotoUrls(urls);
     return () => {
-      for (const id in urls) { URL.revokeObjectURL(urls[id]); }
+      // メモリ解放
+      for (const id in urls) { 
+        urls[id].forEach(url => URL.revokeObjectURL(url));
+      }
     };
   }, [itemPhotos]);
 
@@ -337,7 +342,9 @@ export default function App() {
   };
 
   const handlePhotoUpload = useCallback((id: number, file: File) => {
-    setItemPhotos(prev => ({ ...prev, [id]: file }));
+    // 既存の写真配列に追加していく
+    setItemPhotos(prev => ({ ...prev, [id]: [...(prev[id] || []), file] }));
+    showToast('写真を追加しました！');
   }, []);
 
   // === 保存・呼び出し・リセット処理 ===
@@ -347,6 +354,7 @@ export default function App() {
       message: '入力中のすべての記録と写真、設定を初期化しますか？（保存済みの記録は消えません）',
       onConfirm: () => {
         setEvalCounts({}); setSkillRatings({}); setItemPhotos({});
+        setCurrentRecordId(null); // 上書き対象もリセット
         setConfirmDialog(null);
         showToast('データを初期化しました');
       }
@@ -363,21 +371,65 @@ export default function App() {
     }
   };
 
+  const handleSaveClick = async () => {
+    try {
+      if (currentRecordId) {
+        // すでに呼び出している記録がある場合はそのままの名前をセット
+        setShowSaveModal(true);
+      } else {
+        // 新規作成の場合は重複しない名前を生成
+        const records = await getRecordsFromDB();
+        const existingNames = new Set(records.map(r => r.name));
+        
+        const d = new Date();
+        const baseName = `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日の記録`;
+        let newName = baseName;
+        let counter = 2;
+        
+        while (existingNames.has(newName)) {
+          newName = `${baseName}(${counter})`;
+          counter++;
+        }
+        setSaveName(newName);
+        setShowSaveModal(true);
+      }
+    } catch (e) {
+      showToast('保存の準備に失敗しました');
+    }
+  };
+
   const executeSave = async () => {
     if (!saveName.trim()) {
       showToast('名前を入力してください');
       return;
     }
-    const record = {
-      id: Date.now().toString(),
+    
+    // 上書き保存時は既存のIDを使い、新規なら新しくIDを発行
+    const targetId = currentRecordId || Date.now().toString();
+    
+    const record: any = {
+      id: targetId,
       name: saveName.trim(),
-      createdAt: Date.now(),
+      createdAt: Date.now(), 
       evalCounts, skillRatings, itemPhotos, evalActive, skillActive
     };
+
+    // 上書き保存の場合は、元の作成日時を維持する
+    if (currentRecordId) {
+      try {
+        const existingRecords = await getRecordsFromDB();
+        const existing = existingRecords.find(r => r.id === currentRecordId);
+        if (existing) record.createdAt = existing.createdAt;
+      } catch (e) {
+        // 無視
+      }
+    }
+
     try {
       await saveRecordToDB(record);
+      setCurrentRecordId(targetId); // これで次回からも上書きになる
       setShowSaveModal(false);
-      showToast('記録を保存しました！');
+      showToast(currentRecordId ? '記録を上書き保存しました！' : '記録を保存しました！');
     } catch (e) {
       showToast('保存に失敗しました');
     }
@@ -390,9 +442,21 @@ export default function App() {
       onConfirm: () => {
         setEvalCounts(record.evalCounts || {});
         setSkillRatings(record.skillRatings || {});
-        setItemPhotos(record.itemPhotos || {});
+        
+        // 古いバージョン(写真が1枚だけ)のデータを配列に自動変換する互換性処理
+        const loadedPhotos = record.itemPhotos || {};
+        const migratedPhotos: { [key: number]: Blob[] } = {};
+        for (const id in loadedPhotos) {
+          migratedPhotos[id] = Array.isArray(loadedPhotos[id]) ? loadedPhotos[id] : [loadedPhotos[id]];
+        }
+        setItemPhotos(migratedPhotos);
+
         setEvalActive(record.evalActive || {});
         setSkillActive(record.skillActive || {});
+        
+        setCurrentRecordId(record.id); // 呼び出した記録を「現在の記録」として保持
+        setSaveName(record.name);
+        
         setShowLoadModal(false);
         setConfirmDialog(null);
         showToast('記録を呼び出しました');
@@ -406,6 +470,7 @@ export default function App() {
       message: `保存した記録「${name}」を削除してもよろしいですか？`,
       onConfirm: async () => {
         await deleteRecordFromDB(id);
+        if (id === currentRecordId) setCurrentRecordId(null);
         const records = await getRecordsFromDB();
         setSavedRecords(records);
         setConfirmDialog(null);
@@ -456,7 +521,7 @@ export default function App() {
           <div className="absolute inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
             <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-xl animate-in slide-in-from-bottom-4 duration-200">
               <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center">
-                <SaveIcon /> <span className="ml-2">記録を保存</span>
+                <SaveIcon /> <span className="ml-2">{currentRecordId ? '記録を上書き保存' : '記録を新規保存'}</span>
               </h3>
               <p className="text-xs text-gray-500 mb-2">点数、評価、撮影した写真のすべてが保存されます。</p>
               <input 
@@ -468,7 +533,9 @@ export default function App() {
               />
               <div className="flex space-x-3">
                 <button onClick={() => setShowSaveModal(false)} className="flex-1 py-3.5 bg-gray-100 text-gray-700 font-bold rounded-xl hover:bg-gray-200">キャンセル</button>
-                <button onClick={executeSave} className="flex-1 py-3.5 bg-blue-600 text-white font-bold rounded-xl shadow-md hover:bg-blue-700">保存する</button>
+                <button onClick={executeSave} className="flex-1 py-3.5 bg-blue-600 text-white font-bold rounded-xl shadow-md hover:bg-blue-700">
+                  {currentRecordId ? '上書きする' : '保存する'}
+                </button>
               </div>
             </div>
           </div>
@@ -535,29 +602,7 @@ export default function App() {
               <div className="w-full px-2">
                 <div className="flex justify-center space-x-3">
                   <button 
-                    onClick={async () => {
-                      try {
-                        // 過去の記録を取得して名前のかぶりをチェックする
-                        const records = await getRecordsFromDB();
-                        const existingNames = new Set(records.map(r => r.name));
-                        
-                        const d = new Date();
-                        const baseName = `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日の記録`;
-                        let newName = baseName;
-                        let counter = 2;
-                        
-                        // 同じ名前が存在する間は (2), (3)... と番号を増やす
-                        while (existingNames.has(newName)) {
-                          newName = `${baseName}(${counter})`;
-                          counter++;
-                        }
-                        
-                        setSaveName(newName);
-                        setShowSaveModal(true);
-                      } catch (e) {
-                        showToast('保存の準備に失敗しました');
-                      }
-                    }}
+                    onClick={handleSaveClick}
                     className="flex-1 py-4 bg-indigo-50 text-indigo-700 rounded-2xl font-bold text-base shadow-sm border-2 border-indigo-100 hover:bg-indigo-100 active:scale-95 transition-all flex flex-col items-center justify-center"
                   >
                     <SaveIcon />
@@ -636,7 +681,7 @@ export default function App() {
                         item={item}
                         count={evalCounts[item.id] || 0}
                         isActive={evalActive[item.id]}
-                        photoUrl={itemPhotoUrls[item.id]} // 写真のURLを渡す
+                        hasPhotos={itemPhotoUrls[item.id] && itemPhotoUrls[item.id].length > 0}
                         onToggle={handleEvalToggle}
                         onIncrement={handleEvalIncrement}
                         onDecrement={handleEvalDecrement}
@@ -723,22 +768,10 @@ export default function App() {
               </div>
               
               {/* === 画像・写真表示エリア === */}
-              <div className="w-full bg-white rounded-2xl flex flex-col items-center p-4 space-y-6 shadow-sm border border-gray-100">
+              <div className="w-full bg-white rounded-2xl flex flex-col items-center p-4 shadow-sm border border-gray-100">
                 
-                {itemPhotoUrls[detailItem.id] && (
-                  <div className="w-full flex flex-col items-center">
-                    <span className="text-sm font-bold text-blue-500 mb-3 flex items-center bg-blue-50 px-3 py-1 rounded-full border border-blue-100">
-                      <CameraIcon /> <span className="ml-1">撮影した写真</span>
-                    </span>
-                    <img 
-                      src={itemPhotoUrls[detailItem.id]} 
-                      alt="撮影した写真" 
-                      className="max-w-full max-h-[500px] object-contain rounded-xl shadow-md border border-gray-200"
-                    />
-                  </div>
-                )}
-
-                <div className={`w-full flex flex-col items-center ${itemPhotoUrls[detailItem.id] ? 'pt-6 border-t border-dashed border-gray-200' : ''}`}>
+                {/* 1. 参考画像（常に一番上に表示） */}
+                <div className="w-full flex flex-col items-center pb-6">
                   <span className="text-sm font-bold text-gray-400 mb-3 flex items-center">
                     <ImageIcon /> <span className="ml-1">参考画像</span>
                   </span>
@@ -747,7 +780,7 @@ export default function App() {
                     <img 
                       src={encodeURI(detailItem.imageUrl)} 
                       alt={detailItem.text} 
-                      className={`max-w-full object-contain rounded-xl border border-gray-100 ${itemPhotoUrls[detailItem.id] ? 'max-h-[200px] opacity-70' : 'max-h-[400px] shadow-sm'}`}
+                      className={`max-w-full object-contain rounded-xl border border-gray-100 ${itemPhotoUrls[detailItem.id] && itemPhotoUrls[detailItem.id].length > 0 ? 'max-h-[250px] opacity-80' : 'max-h-[400px] shadow-sm'}`}
                       onError={(e) => {
                         (e.target as HTMLImageElement).style.display = 'none';
                         (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
@@ -760,6 +793,29 @@ export default function App() {
                     <span className="mt-2 text-base">画像ファイル（{detailItem.imageUrl}）が<br/>見つかりません</span>
                   </div>
                 </div>
+
+                {/* 2. 撮影された写真リスト（参考画像の下に並べる） */}
+                {itemPhotoUrls[detailItem.id] && itemPhotoUrls[detailItem.id].length > 0 && (
+                  <div className="w-full flex flex-col items-center pt-6 border-t border-dashed border-gray-200 space-y-6">
+                    <span className="text-sm font-bold text-blue-500 flex items-center bg-blue-50 px-3 py-1 rounded-full border border-blue-100">
+                      <CameraIcon /> <span className="ml-1">撮影した写真</span>
+                    </span>
+                    
+                    {/* 写真を順番にすべて表示 */}
+                    {itemPhotoUrls[detailItem.id].map((url, idx) => (
+                      <div key={idx} className="w-full relative">
+                        <span className="absolute top-2 left-2 bg-black bg-opacity-50 text-white text-xs font-bold px-2 py-1 rounded-lg z-10">
+                          {idx + 1}枚目
+                        </span>
+                        <img 
+                          src={url} 
+                          alt={`撮影した写真 ${idx + 1}`} 
+                          className="max-w-full w-full object-contain rounded-xl shadow-md border border-gray-200"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
 
               </div>
             </main>
