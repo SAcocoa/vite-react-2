@@ -83,7 +83,6 @@ const deleteRecordFromDB = async (id: string) => {
   });
 };
 
-
 // === データ定義 ===
 const EVALUATION_ITEMS: ItemDef[] = [
   { id: 1, type: 'eval', category: '導入', text: '振り返り・課題設定', titleLines: ['振り返り', '課題設定'], description: '子どもが主体的に取り組む課題（めあて）設定ができたか？', imageUrl: '/A1.png' },
@@ -181,8 +180,7 @@ const EvalCard: React.FC<EvalCardProps> = ({ item, count, isActive, hasPhotos, o
     if (e.target.files && e.target.files[0]) {
       onPhotoUpload(item.id, e.target.files[0]);
     }
-    // 連続して同じファイルを選べるようにリセット
-    e.target.value = '';
+    e.target.value = ''; // 連続してファイルを選べるようにリセット
   };
 
   return (
@@ -292,7 +290,7 @@ export default function App() {
   // 上書き保存用に、現在読み込んでいる記録のIDを保持する
   const [currentRecordId, setCurrentRecordId] = useState<string | null>(null);
 
-  // アプリのデータ状態 (写真を配列で保持するように変更)
+  // アプリのデータ状態 (写真を「配列」で保持して複数枚対応)
   const [itemPhotos, setItemPhotos] = useState<{ [key: number]: Blob[] }>({});
   const [itemPhotoUrls, setItemPhotoUrls] = useState<{ [key: number]: string[] }>({});
 
@@ -341,9 +339,12 @@ export default function App() {
     setCurrentPage('detail');
   };
 
+  // 写真を追加する処理（配列に追加していく）
   const handlePhotoUpload = useCallback((id: number, file: File) => {
-    // 既存の写真配列に追加していく
-    setItemPhotos(prev => ({ ...prev, [id]: [...(prev[id] || []), file] }));
+    setItemPhotos(prev => {
+      const existing = prev[id] || [];
+      return { ...prev, [id]: [...existing, file] };
+    });
     showToast('写真を追加しました！');
   }, []);
 
@@ -355,6 +356,7 @@ export default function App() {
       onConfirm: () => {
         setEvalCounts({}); setSkillRatings({}); setItemPhotos({});
         setCurrentRecordId(null); // 上書き対象もリセット
+        setSaveName('');
         setConfirmDialog(null);
         showToast('データを初期化しました');
       }
@@ -377,7 +379,7 @@ export default function App() {
         // すでに呼び出している記録がある場合はそのままの名前をセット
         setShowSaveModal(true);
       } else {
-        // 新規作成の場合は重複しない名前を生成
+        // 新規作成の場合は重複しない名前(日付など)を自動生成
         const records = await getRecordsFromDB();
         const existingNames = new Set(records.map(r => r.name));
         
@@ -470,7 +472,10 @@ export default function App() {
       message: `保存した記録「${name}」を削除してもよろしいですか？`,
       onConfirm: async () => {
         await deleteRecordFromDB(id);
-        if (id === currentRecordId) setCurrentRecordId(null);
+        if (id === currentRecordId) {
+           setCurrentRecordId(null);
+           setSaveName('');
+        }
         const records = await getRecordsFromDB();
         setSavedRecords(records);
         setConfirmDialog(null);
@@ -794,11 +799,11 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* 2. 撮影された写真リスト（参考画像の下に並べる） */}
+                {/* 2. 撮影された写真リスト（参考画像の下に順番に並べる） */}
                 {itemPhotoUrls[detailItem.id] && itemPhotoUrls[detailItem.id].length > 0 && (
                   <div className="w-full flex flex-col items-center pt-6 border-t border-dashed border-gray-200 space-y-6">
                     <span className="text-sm font-bold text-blue-500 flex items-center bg-blue-50 px-3 py-1 rounded-full border border-blue-100">
-                      <CameraIcon /> <span className="ml-1">撮影した写真</span>
+                      <CameraIcon /> <span className="ml-1">撮影した写真 ({itemPhotoUrls[detailItem.id].length}枚)</span>
                     </span>
                     
                     {/* 写真を順番にすべて表示 */}
