@@ -40,9 +40,10 @@ const STORE_NAME = 'records';
 const openDB = (): Promise<IDBDatabase> => {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, 1);
-    request.onupgradeneeded = (e: any) => {
-      if (!e.target.result.objectStoreNames.contains(STORE_NAME)) {
-        e.target.result.createObjectStore(STORE_NAME, { keyPath: 'id' });
+    request.onupgradeneeded = (e: IDBVersionChangeEvent) => {
+      const target = e.target as IDBOpenDBRequest;
+      if (!target.result.objectStoreNames.contains(STORE_NAME)) {
+        target.result.createObjectStore(STORE_NAME, { keyPath: 'id' });
       }
     };
     request.onsuccess = () => resolve(request.result);
@@ -66,7 +67,12 @@ const getRecordsFromDB = async () => {
     const tx = db.transaction(STORE_NAME, 'readonly');
     const request = tx.objectStore(STORE_NAME).getAll();
     request.onsuccess = () => {
-      const records = request.result.sort((a: any, b: any) => b.createdAt - a.createdAt);
+      // any型による警告を避けるため型安全にソート
+      const records = request.result.sort((a, b) => {
+        const timeA = typeof a.createdAt === 'number' ? a.createdAt : 0;
+        const timeB = typeof b.createdAt === 'number' ? b.createdAt : 0;
+        return timeB - timeA;
+      });
       resolve(records);
     };
     request.onerror = () => reject(request.error);
@@ -161,11 +167,21 @@ const EvalCard: React.FC<EvalCardProps> = ({ item, count, isActive, hasPhotos, o
 
     if (!cardRef.current) return;
     const rect = cardRef.current.getBoundingClientRect();
+    
+    // 型安全に座標を取得
     let clientX = 0, clientY = 0;
-    if ('touches' in e) { clientX = e.touches[0].clientX; clientY = e.touches[0].clientY; } 
-    else { clientX = e.clientX; clientY = e.clientY; }
-    const x = clientX - rect.left; const y = clientY - rect.top;
+    if ('touches' in e && e.touches.length > 0) { 
+      clientX = e.touches[0].clientX; 
+      clientY = e.touches[0].clientY; 
+    } else if ('clientX' in e) { 
+      clientX = (e as React.MouseEvent).clientX; 
+      clientY = (e as React.MouseEvent).clientY; 
+    }
+    
+    const x = clientX - rect.left; 
+    const y = clientY - rect.top;
     const newSpark: Spark = { id: Date.now(), x, y };
+    
     setSparks((prev) => [...prev, newSpark]);
     onIncrement(item.id);
     setTimeout(() => { setSparks((prev) => prev.filter((spark) => spark.id !== newSpark.id)); }, 800);
@@ -180,7 +196,10 @@ const EvalCard: React.FC<EvalCardProps> = ({ item, count, isActive, hasPhotos, o
     if (e.target.files && e.target.files[0]) {
       onPhotoUpload(item.id, e.target.files[0]);
     }
-    e.target.value = ''; // 連続してファイルを選べるようにリセット
+    // エラー防止: valueのリセット
+    if (e.target) {
+      e.target.value = '';
+    }
   };
 
   return (
@@ -287,6 +306,7 @@ export default function App() {
   const [showLoadModal, setShowLoadModal] = useState(false);
   const [saveName, setSaveName] = useState('');
   const [savedRecords, setSavedRecords] = useState<any[]>([]);
+  
   // 上書き保存用に、現在読み込んでいる記録のIDを保持する
   const [currentRecordId, setCurrentRecordId] = useState<string | null>(null);
 
@@ -296,28 +316,38 @@ export default function App() {
 
   const [evalCounts, setEvalCounts] = useState<{ [key: number]: number }>({});
   const [evalActive, setEvalActive] = useState<{ [key: number]: boolean }>(() => {
-    const init: any = {}; EVALUATION_ITEMS.forEach(item => init[item.id] = true); return init;
+    const init: Record<number, boolean> = {}; 
+    EVALUATION_ITEMS.forEach(item => { init[item.id] = true; }); 
+    return init;
   });
 
   const [skillRatings, setSkillRatings] = useState<{ [key: number]: SkillRating }>({});
   const [skillActive, setSkillActive] = useState<{ [key: number]: boolean }>(() => {
-    const init: any = {}; SKILL_ITEMS.forEach(item => init[item.id] = true); return init;
+    const init: Record<number, boolean> = {}; 
+    SKILL_ITEMS.forEach(item => { init[item.id] = true; }); 
+    return init;
   });
 
-  // Blob(写真配列)から表示用のURL配列を生成する処理
+  // Blob(写真配列)から表示用のURL配列を生成する処理（型エラー対応版）
   useEffect(() => {
-    const urls: { [key: number]: string[] } = {};
-    for (const id in itemPhotos) {
+    const urls: Record<number, string[]> = {};
+    Object.keys(itemPhotos).forEach((key) => {
+      const id = Number(key);
       if (itemPhotos[id] && itemPhotos[id].length > 0) {
-        urls[id] = itemPhotos[id].map(blob => URL.createObjectURL(blob));
+        urls[id] = itemPhotos[id].map((blob) => URL.createObjectURL(blob));
       }
-    }
+    });
+    
     setItemPhotoUrls(urls);
+    
+    // クリーンアップ
     return () => {
-      // メモリ解放
-      for (const id in urls) { 
-        urls[id].forEach(url => URL.revokeObjectURL(url));
-      }
+      Object.keys(urls).forEach((key) => {
+        const id = Number(key);
+        if (urls[id]) {
+          urls[id].forEach(url => URL.revokeObjectURL(url));
+        }
+      });
     };
   }, [itemPhotos]);
 
@@ -423,7 +453,7 @@ export default function App() {
         const existing = existingRecords.find(r => r.id === currentRecordId);
         if (existing) record.createdAt = existing.createdAt;
       } catch (e) {
-        // 無視
+        // エラー時は何もしない
       }
     }
 
@@ -445,14 +475,17 @@ export default function App() {
         setEvalCounts(record.evalCounts || {});
         setSkillRatings(record.skillRatings || {});
         
-        // 古いバージョン(写真が1枚だけ)のデータを配列に自動変換する互換性処理
+        // 型の不一致エラーを回避するための安全なデータ復元処理
         const loadedPhotos = record.itemPhotos || {};
-        const migratedPhotos: { [key: number]: Blob[] } = {};
-        for (const id in loadedPhotos) {
-          migratedPhotos[id] = Array.isArray(loadedPhotos[id]) ? loadedPhotos[id] : [loadedPhotos[id]];
-        }
+        const migratedPhotos: Record<number, Blob[]> = {};
+        
+        Object.keys(loadedPhotos).forEach((key) => {
+          const id = Number(key);
+          const photoData = loadedPhotos[key as keyof typeof loadedPhotos];
+          migratedPhotos[id] = Array.isArray(photoData) ? photoData : [photoData];
+        });
+        
         setItemPhotos(migratedPhotos);
-
         setEvalActive(record.evalActive || {});
         setSkillActive(record.skillActive || {});
         
